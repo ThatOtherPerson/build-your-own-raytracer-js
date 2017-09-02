@@ -106,6 +106,67 @@ class Sphere {
   }
 }
 
+class BoundingBox {
+  constructor(vmin, vmax, color) {
+    this.vmin = vmin;
+    this.vmax = vmax;
+    this.color = color;
+  }
+
+  intersect(ray) {
+    let tmin = (this.vmin.x - ray.origin.x) / ray.direction.x;
+    let tmax = (this.vmax.x - ray.origin.x) / ray.direction.x;
+
+    if (tmin > tmax) {
+      const temp = tmin;
+      tmin = tmax;
+      tmax = temp;
+    }
+
+    let tymin = (this.vmin.y - ray.origin.y) / ray.direction.y;
+    let tymax = (this.vmax.y - ray.origin.y) / ray.direction.y;
+
+    if (tymin > tymax) {
+      const temp = tymin;
+      tymin = tymax;
+      tymax = temp;
+    }
+
+    if ((tmin > tymax) || (tymin > tmax))
+      return false;
+
+    if (tymin > tmin)
+      tmin = tymin;
+
+    if (tymax < tmax)
+      tmax = tymax;
+
+    const tzmin = (this.vmin.z - ray.origin.z) / ray.direction.z;
+    const tzmax = (this.vmax.z - ray.origin.z) / ray.direction.z;
+
+    if (tzmin > tzmax) {
+      const temp = tzmin;
+      tzmin = tzmax;
+      tzmax = temp;
+    }
+
+    if ((tmin > tzmax) || (tzmin > tmax))
+      return false;
+
+    if (tzmin > tmin)
+      tmin = tzmin;
+
+    if (tzmax < tmax)
+      tmax = tzmax;
+
+    if (tmin >= 0) {
+      return tmin;
+    }
+
+    return false;
+  }
+}
+
 let random_color = () => {
   return new Color(
     Math.random() * 0.5 + 0.5,
@@ -144,7 +205,9 @@ let random_position = () => {
 //   new Sphere(new Vector(-30, -20, 80), 20, random_color())
 // ];
 
-const geometry = [];
+const geometry = [
+  new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), new Color(1, 0, 0))
+];
 
 for (let sp = 0; sp < 100; sp++) {
   geometry.push(new Sphere(random_position(), random_radius(), random_color()))
