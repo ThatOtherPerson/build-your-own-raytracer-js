@@ -82,12 +82,33 @@ class Color {
     );
   }
 
+  at_pxy(x, y) {
+    return this;
+  }
+
   to_discrete() {
     return {
       r: this.r * 255,
       g: this.g * 255,
       b: this.b * 255
     };
+  }
+}
+
+class Texture {
+  constructor(image) {
+    this.image = image;
+  }
+
+  at_pxy(px, py) {
+    const x = Math.round(px * (this.image.length - 1));
+    const y = Math.round(px * (this.image[0].length - 1));
+
+    //console.log(px, py, x, y);
+    window.samples = window.samples || [];
+    window.samples.push({x, y});
+
+    return this.image[x][y];
   }
 }
 
@@ -150,11 +171,19 @@ class Sphere {
     const point = ray.origin.add(ray.direction.normalize().multiply(t)); 
     const normal = point.subtract(this.center).normalize();
 
+    // rename UV
+    // for pxy also
+    const tex_x = Math.atan2(normal.x, normal.z) / (2 * Math.PI) + 0.5;
+    const tex_y = normal.y * 0.5 + 0.5;
+
     return {
       distance: t,
       point,
       normal,
-      material: this.material,
+      ambient: this.material.ambient.at_pxy(tex_x, tex_y),
+      diffuse: this.material.diffuse.at_pxy(tex_x, tex_y),
+      specular: this.material.specular.at_pxy(tex_x, tex_y),
+      shininess: this.material.shininess,
       geo: this
     };
   }
@@ -245,11 +274,16 @@ class Plane {
       if (t >= 0) {
         const surface = ray.origin.add(ray.direction.normalize().multiply(t));
 
+        const material = default_material((Math.round(surface.x / 10) + Math.round(surface.z / 10)) & 1 ? Color.WHITE : Color.BLACK);
+
         return {
           distance: t,
           point: surface,
+          ambient: material.ambient,
+          diffuse: material.diffuse,
+          specular: material.specular,
+          shininess: material.shininess,
           normal: this.normal,
-          material: default_material((Math.round(surface.x / 10) + Math.round(surface.z / 10)) & 1 ? Color.WHITE : Color.BLACK),
           geo: this
         };
       }
@@ -297,27 +331,50 @@ let random_position = () => {
   );
 };
 
-// let old_spheres = [
-//   new Sphere(new Vector(10, 13, 100), 25, new Color(0.9, 0.2, 0.4)),
-//   new Sphere(new Vector(30, -5, 70), 15, new Color(0.4, 0.9, 0.5)),
-//   new Sphere(new Vector(-30, -20, 80), 20, random_color())
-// ];
+const createScene = () => {
+  return loadImg('earth.jpg').then(earth => {
+    // let old_spheres = [
+    //   new Sphere(new Vector(10, 13, 100), 25, new Color(0.9, 0.2, 0.4)),
+    //   new Sphere(new Vector(30, -5, 70), 15, new Color(0.4, 0.9, 0.5)),
+    //   new Sphere(new Vector(-30, -20, 80), 20, random_color())
+    // ];
 
-const geometry = [
-  //new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), default_material(new Color(1, 0, 0))),
-  new Plane(new Vector(0, -30, 0), new Vector(0, 1, 0))
-];
+    const geometry = [
+      //new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), default_material(new Color(1, 0, 0))),
+      new Plane(new Vector(0, -30, 0), new Vector(0, 1, 0)),
+      new Sphere(new Vector(0, 0, 50), 20, default_material(new Color(0, 1, 1)))
+      //new Sphere(new Vector(0, 0, 50), 20, default_material(new Texture(earth)))
+    ];
 
-for (let sp = 0; sp < 100; sp++) {
-  geometry.push(new Sphere(random_position(), random_radius(), default_material(random_color())))
-}
+    for (let sp = 0; sp < 100; sp++) {
+      geometry.push(new Sphere(random_position(), random_radius(), default_material(random_color())))
+    }
 
+    const scene = {
+      imagePlane: {
+        x1: new Vector(1, 0.75, 0),
+        x2: new Vector(-1, 0.75, 0),
+        x3: new Vector(1, -0.75, 0),
+        x4: new Vector(-1, -0.75, 0)
+      },
+      camera_origin: new Vector(0, 0, -1),
+      ambient: new Color(0.2, 0.2, 0.2),
+      lights: [
+        new PointLight(new Vector(30, 30, 20), new Color(0.8, 0.8, 0.8), new Color(0.8, 0.8, 0.8)),
+        //new PointLight(new Vector(5, 5, 0), new Color(0.8, 0.8, 0.8), new Color(1, 1, 1))
+      ],
+      geometry
+    };
+
+    return Promise.resolve(scene);
+  });
+};
 const imageDataToPixels = imageData => {
   let image = [];
 
-  for (let y = 0; y < imageData.height; y++) {
+  for (let x = 0; x < imageData.width; x++) {
     let row = [];
-    for (let x = 0; x < imageData.width; x++) {
+    for (let y = 0; y < imageData.height; y++) {
       const index = (x + (y * imageData.width)) * 4;
       const r = imageData.data[index];
       const g = imageData.data[index + 1];
@@ -354,21 +411,6 @@ const loadImg = url => {
   });
 };
 
-const scene = {
-  imagePlane: {
-    x1: new Vector(1, 0.75, 0),
-    x2: new Vector(-1, 0.75, 0),
-    x3: new Vector(1, -0.75, 0),
-    x4: new Vector(-1, -0.75, 0)
-  },
-  camera_origin: new Vector(0, 0, -1),
-  ambient: new Color(0.2, 0.2, 0.2),
-  lights: [
-    new PointLight(new Vector(30, 30, 20), new Color(0.8, 0.8, 0.8), new Color(0.8, 0.8, 0.8)),
-    //new PointLight(new Vector(5, 5, 0), new Color(0.8, 0.8, 0.8), new Color(1, 1, 1))
-  ],
-  geometry
-}
 
 const closestIntersection = (ray, exclude) => {
   let closest = {
@@ -404,9 +446,7 @@ const trace = ray => {
   if (!isFinite(closest.distance))
     return Color.BLACK;
 
-  const material = closest.material;
-
-  const ambient = material.ambient.multiply(scene.ambient);
+  const ambient = closest.ambient.multiply(scene.ambient);
 
   let diffuse = Color.BLACK;
   let specular = Color.BLACK;
@@ -421,7 +461,7 @@ const trace = ray => {
     if (inShadow(closest.geo, closest.point, light))
       continue;
 
-    const d = material.diffuse.multiply(light.diffuse).scale(alignment);
+    const d = closest.diffuse.multiply(light.diffuse).scale(alignment);
     diffuse = diffuse.add(d);
 
     const reflection = closest.normal.multiply(closest.normal.dot(light_direction) * 2).subtract(light_direction);
@@ -433,7 +473,7 @@ const trace = ray => {
     if (view_alignment < 0)
       continue;
 
-    const s = material.specular.multiply(light.specular).scale(Math.pow(view_alignment, material.shininess))
+    const s = closest.specular.multiply(light.specular).scale(Math.pow(view_alignment, closest.shininess))
     specular = specular.add(s);
   }
 
@@ -476,4 +516,6 @@ const render = () => {
   image.renderInto(document.querySelector('body'));
 };
 
-render();
+createScene()
+  .then(s => window.scene = s)
+  .then(render);
