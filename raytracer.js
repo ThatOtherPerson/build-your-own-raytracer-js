@@ -233,16 +233,20 @@ class Plane {
   }
 
   intersect(ray) {
-    const denom = this.normal.dot(ray.direction.normalize());
+    // TODO: ???? why???
+    const normal = this.normal.multiply(-1);
+    const denom = normal.dot(ray.direction.normalize());
     if (denom > 1e-6) {
       const p0l0 = this.point.subtract(ray.origin);
-      const t = p0l0.dot(this.normal) / denom;
+      const t = p0l0.dot(normal) / denom;
 
       if (t >= 0) {
         const surface = ray.origin.add(ray.direction.normalize().multiply(t));
 
         return {
           distance: t,
+          point: surface,
+          normal: this.normal,
           material: default_material((Math.round(surface.x / 10) + Math.round(surface.z / 10)) & 1 ? Color.WHITE : Color.BLACK)
         };
       }
@@ -295,7 +299,7 @@ let random_position = () => {
 
 const geometry = [
   //new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), default_material(new Color(1, 0, 0))),
-  //new Plane(new Vector(0, -30, 0), new Vector(0, -1, 0))
+  new Plane(new Vector(0, -30, 0), new Vector(0, 1, 0))
 ];
 
 for (let sp = 0; sp < 100; sp++) {
