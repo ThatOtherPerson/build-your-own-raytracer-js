@@ -154,7 +154,8 @@ class Sphere {
       distance: t,
       point,
       normal,
-      material: this.material
+      material: this.material,
+      geo: this
     };
   }
 }
@@ -218,7 +219,8 @@ class BoundingBox {
       return {
         distance: tmin,
         //point,
-        material: this.material
+        material: this.material,
+        geo: this
       };
     }
 
@@ -247,7 +249,8 @@ class Plane {
           distance: t,
           point: surface,
           normal: this.normal,
-          material: default_material((Math.round(surface.x / 10) + Math.round(surface.z / 10)) & 1 ? Color.WHITE : Color.BLACK)
+          material: default_material((Math.round(surface.x / 10) + Math.round(surface.z / 10)) & 1 ? Color.WHITE : Color.BLACK),
+          geo: this
         };
       }
     }
@@ -365,17 +368,16 @@ const scene = {
     //new PointLight(new Vector(5, 5, 0), new Color(0.8, 0.8, 0.8), new Color(1, 1, 1))
   ],
   geometry
-};
+}
 
-const image = new Image(WIDTH, HEIGHT);
-document.image = image;
-
-const trace = ray => {
+const closestIntersection = (ray, exclude) => {
   let closest = {
     distance: Infinity
   };
 
   for (object of scene.geometry) {
+    if (object === exclude) continue;
+
     const intersection = object.intersect(ray);
     const distance = intersection.distance;
 
@@ -383,6 +385,21 @@ const trace = ray => {
       closest = intersection;
     }
   }
+
+  return closest;
+};
+
+const inShadow = (geo, point, light) => {
+  let point_to_light = light.location.subtract(point);
+  let shadowRay = new Ray(point, point_to_light);
+
+  let closest = closestIntersection(shadowRay, geo);
+
+  return closest.distance > 0 && closest.distance < point_to_light.magnitude();
+};
+
+const trace = ray => {
+  let closest = closestIntersection(ray);
 
   if (!isFinite(closest.distance))
     return Color.BLACK;
@@ -393,12 +410,15 @@ const trace = ray => {
 
   let diffuse = Color.BLACK;
   let specular = Color.BLACK;
-  
+
   for (let light of scene.lights) {
     const light_direction = light.location.subtract(closest.point).normalize();
     const alignment = closest.normal.dot(light_direction);
 
     if (alignment < 0)
+      continue;
+
+    if (inShadow(closest.geo, closest.point, light))
       continue;
 
     const d = material.diffuse.multiply(light.diffuse).scale(alignment);
@@ -435,6 +455,9 @@ const sample_pixel = (x, y) => {
 
   return trace(ray);
 };
+
+const image = new Image(WIDTH, HEIGHT);
+document.image = image;
 
 const render = () => {
   for (let y = 0; y < HEIGHT; y++) {
