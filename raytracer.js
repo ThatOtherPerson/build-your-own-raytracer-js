@@ -58,6 +58,30 @@ class Color {
     this.b = b;
   }
 
+  multiply(other) {
+    return new Color(
+      this.r * other.r,
+      this.g * other.g,
+      this.b * other.b
+    );
+  }
+
+  scale(s) {
+    return new Color(
+      this.r * s,
+      this.g * s,
+      this.b * s
+    );
+  }
+
+  add(v) {
+    return new Color(
+      this.r + v.r,
+      this.g + v.g,
+      this.b + v.b
+    );
+  }
+
   to_discrete() {
     return {
       r: this.r * 255,
@@ -73,6 +97,14 @@ class PhongMaterial {
     this.specular = specular;
     this.ambient = ambient;
     this.shininess = shininess;
+  }
+}
+
+class PointLight {
+  constructor(location, diffuse, specular) {
+    this.location = location;
+    this.diffuse = diffuse;
+    this.specular = specular;
   }
 }
 
@@ -114,8 +146,14 @@ class Sphere {
     if (minus >= 0 && minus < t)
       t = minus;
 
+    // TODO: get material, point, and normal after finding closest intersection
+    const point = ray.origin.add(ray.direction.normalize().multiply(t)); 
+    const normal = point.subtract(this.center).normalize();
+
     return {
       distance: t,
+      point,
+      normal,
       material: this.material
     };
   }
@@ -175,8 +213,11 @@ class BoundingBox {
       tmax = tzmax;
 
     if (tmin >= 0) {
+      //const point = ray.origin.add(ray.direction.normalize().multiply(tmin)); 
+
       return {
         distance: tmin,
+        //point,
         material: this.material
       };
     }
@@ -212,7 +253,7 @@ class Plane {
 }
 
 const default_material = color =>
-  new PhongMaterial(color, color, Color.WHITE, 50);
+  new PhongMaterial(color, new Color(0.5, 0.5, 0.5), color, 50);
 
 const random_color = () => {
   return new Color(
@@ -253,8 +294,8 @@ let random_position = () => {
 // ];
 
 const geometry = [
-  new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), default_material(new Color(1, 0, 0))),
-  new Plane(new Vector(0, -30, 0), new Vector(0, -1, 0))
+  //new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), default_material(new Color(1, 0, 0))),
+  //new Plane(new Vector(0, -30, 0), new Vector(0, -1, 0))
 ];
 
 for (let sp = 0; sp < 100; sp++) {
@@ -268,7 +309,12 @@ const scene = {
     x3: new Vector(1, -0.75, 0),
     x4: new Vector(-1, -0.75, 0)
   },
-  cameraOrigin: new Vector(0, 0, -1),
+  camera_origin: new Vector(0, 0, -1),
+  ambient: new Color(0.2, 0.2, 0.2),
+  lights: [
+    new PointLight(new Vector(30, 30, 20), new Color(0.8, 0.8, 0.8), new Color(0.8, 0.8, 0.8)),
+    //new PointLight(new Vector(5, 5, 0), new Color(0.8, 0.8, 0.8), new Color(1, 1, 1))
+  ],
   geometry
 };
 
@@ -294,7 +340,35 @@ const trace = ray => {
 
   const material = closest.material;
 
-  return material.diffuse;
+  const ambient = material.ambient.multiply(scene.ambient);
+
+  let diffuse = Color.BLACK;
+  let specular = Color.BLACK;
+  
+  for (let light of scene.lights) {
+    const light_direction = light.location.subtract(closest.point).normalize();
+    const alignment = closest.normal.dot(light_direction);
+
+    if (alignment < 0)
+      continue;
+
+    const d = material.diffuse.multiply(light.diffuse).scale(alignment);
+    diffuse = diffuse.add(d);
+
+    const reflection = closest.normal.multiply(closest.normal.dot(light_direction) * 2).subtract(light_direction);
+    const view = closest.point.subtract(scene.camera_origin).normalize();
+
+    // ???? it works >.>
+    const view_alignment = -view.dot(reflection);
+
+    if (view_alignment < 0)
+      continue;
+
+    const s = material.specular.multiply(light.specular).scale(Math.pow(view_alignment, material.shininess))
+    specular = specular.add(s);
+  }
+
+  return ambient.add(diffuse).add(specular);
 }
 
 const sample_pixel = (x, y) => {
@@ -306,7 +380,7 @@ const sample_pixel = (x, y) => {
   const b = Vector.lerp(scene.imagePlane.x3, scene.imagePlane.x4, alpha);
   const p = Vector.lerp(t, b, beta);
 
-  const direction = p.subtract(scene.cameraOrigin);
+  const direction = p.subtract(scene.camera_origin);
 
   const ray = new Ray(p, direction);
 
