@@ -1,6 +1,8 @@
 const WIDTH = 256;
 const HEIGHT = 192;
 
+const NUM_BOUNCES = 3;
+
 class Vector {
   constructor(x, y, z) {
     this.x = x;
@@ -113,10 +115,11 @@ class Texture {
 }
 
 class PhongMaterial {
-  constructor(diffuse, specular, ambient, shininess) {
+  constructor(diffuse, specular, ambient, reflectivity, shininess) {
     this.diffuse = diffuse;
     this.specular = specular;
     this.ambient = ambient;
+    this.reflectivity = reflectivity;
     this.shininess = shininess;
   }
 }
@@ -183,6 +186,7 @@ class Sphere {
       ambient: this.material.ambient.at_pxy(tex_x, tex_y),
       diffuse: this.material.diffuse.at_pxy(tex_x, tex_y),
       specular: this.material.specular.at_pxy(tex_x, tex_y),
+      reflectivity: this.material.reflectivity,
       shininess: this.material.shininess,
       geo: this
     };
@@ -274,7 +278,8 @@ class Plane {
       if (t >= 0) {
         const surface = ray.origin.add(ray.direction.normalize().multiply(t));
 
-        const material = default_material((Math.round(surface.x / 10) + Math.round(surface.z / 10)) & 1 ? Color.WHITE : Color.BLACK);
+        const color = (Math.round(surface.x / 10) + Math.round(surface.z / 10)) & 1 ? Color.WHITE : Color.BLACK;
+        const material = new PhongMaterial(color.scale(0.4), new Color(0.5, 0.5, 0.5), color, new Color(0.8, 0.8, 0.8), 50);
 
         return {
           distance: t,
@@ -283,6 +288,7 @@ class Plane {
           diffuse: material.diffuse,
           specular: material.specular,
           shininess: material.shininess,
+          reflectivity: material.reflectivity,
           normal: this.normal,
           geo: this
         };
@@ -297,7 +303,7 @@ class Triangle {
 }
 
 const default_material = color =>
-  new PhongMaterial(color, new Color(0.5, 0.5, 0.5), color, 50);
+  new PhongMaterial(color, new Color(0.5, 0.5, 0.5), color, false, 50);
 
 const random_color = () => {
   return new Color(
@@ -339,10 +345,12 @@ const createScene = () => {
     //   new Sphere(new Vector(-30, -20, 80), 20, random_color())
     // ];
 
+    const torquoise = new Color(0, 1, 1);
+
     const geometry = [
       //new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), default_material(new Color(1, 0, 0))),
       new Plane(new Vector(0, -30, 0), new Vector(0, 1, 0)),
-      new Sphere(new Vector(0, 0, 50), 20, default_material(new Color(0, 1, 1)))
+      new Sphere(new Vector(0, 0, 100), 50, new PhongMaterial(torquoise.scale(0.2), new Color(0.8, 0.8, 0.8), torquoise, new Color(0.8, 0.8, 0.8), 50))
       //new Sphere(new Vector(0, 0, 50), 20, default_material(new Texture(earth)))
     ];
 
@@ -440,8 +448,16 @@ const inShadow = (geo, point, light) => {
   return closest.distance > 0 && closest.distance < point_to_light.magnitude();
 };
 
-const trace = ray => {
-  let closest = closestIntersection(ray);
+const reflect = (n, v) =>
+  n.multiply(n.dot(v) * 2).subtract(v);
+
+const trace = (ray, bounces, exclude) => {
+  bounces = bounces || 0;
+
+  if (bounces >= NUM_BOUNCES)
+    return Color.BLACK;
+
+  let closest = closestIntersection(ray, exclude);
 
   if (!isFinite(closest.distance))
     return Color.BLACK;
@@ -450,6 +466,7 @@ const trace = ray => {
 
   let diffuse = Color.BLACK;
   let specular = Color.BLACK;
+  let reflectivity = Color.BLACK;
 
   for (let light of scene.lights) {
     const light_direction = light.location.subtract(closest.point).normalize();
@@ -458,17 +475,24 @@ const trace = ray => {
     if (alignment < 0)
       continue;
 
+    if (closest.reflectivity) {
+      const v = ray.direction.multiply(-1).normalize();
+      const reflectance = reflect(closest.normal, v);
+      const reflection = new Ray(closest.point, reflectance);
+      reflectivity = reflectivity.add(trace(reflection, bounces + 1, closest.geo).multiply(closest.reflectivity));
+    }
+
     if (inShadow(closest.geo, closest.point, light))
       continue;
 
     const d = closest.diffuse.multiply(light.diffuse).scale(alignment);
     diffuse = diffuse.add(d);
 
-    const reflection = closest.normal.multiply(closest.normal.dot(light_direction) * 2).subtract(light_direction);
+    const light_reflection = reflect(closest.normal, light_direction);
     const view = closest.point.subtract(scene.camera_origin).normalize();
 
     // ???? it works >.>
-    const view_alignment = -view.dot(reflection);
+    const view_alignment = -view.dot(light_reflection);
 
     if (view_alignment < 0)
       continue;
@@ -477,7 +501,7 @@ const trace = ray => {
     specular = specular.add(s);
   }
 
-  return ambient.add(diffuse).add(specular);
+  return ambient.add(diffuse).add(specular).add(reflectivity);
 }
 
 const sample_pixel = (x, y) => {
