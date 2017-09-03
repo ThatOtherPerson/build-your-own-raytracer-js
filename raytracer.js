@@ -313,6 +313,19 @@ const random_color = () => {
   );
 };
 
+const random_material = () => {
+  let reflective = Math.random() < 0.2;
+  let color = random_color();
+
+  if (reflective) {
+    let reflectivity = Math.random();
+    let df = 1 - reflectivity;
+    return new PhongMaterial(color.scale(df), new Color(0.5, 0.5, 0.5), color, new Color(reflectivity, reflectivity, reflectivity), 50);
+  } else {
+    return default_material(color);
+  }
+};
+
 const random_radius = () => {
   const max = 30;
   const min = 5;
@@ -350,12 +363,12 @@ const createScene = () => {
     const geometry = [
       //new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), default_material(new Color(1, 0, 0))),
       new Plane(new Vector(0, -30, 0), new Vector(0, 1, 0)),
-      new Sphere(new Vector(0, 0, 100), 50, new PhongMaterial(torquoise.scale(0.2), new Color(0.8, 0.8, 0.8), torquoise, new Color(0.8, 0.8, 0.8), 50))
+      //new Sphere(new Vector(0, 0, 100), 50, new PhongMaterial(torquoise.scale(0.2), new Color(0.8, 0.8, 0.8), torquoise, new Color(0.8, 0.8, 0.8), 50))
       //new Sphere(new Vector(0, 0, 50), 20, default_material(new Texture(earth)))
     ];
 
     for (let sp = 0; sp < 100; sp++) {
-      geometry.push(new Sphere(random_position(), random_radius(), default_material(random_color())))
+      geometry.push(new Sphere(random_position(), random_radius(), random_material()))
     }
 
     const scene = {
