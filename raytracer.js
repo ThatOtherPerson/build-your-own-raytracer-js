@@ -42,7 +42,7 @@ class Vector {
     return Math.sqrt(this.dot(this));
   }
 
-  normalized() {
+  normalize() {
     return this.multiply(1 / this.magnitude());
   }
 }
@@ -67,6 +67,18 @@ class Color {
   }
 }
 
+class PhongMaterial {
+  constructor(diffuse, specular, ambient, shininess) {
+    this.diffuse = diffuse;
+    this.specular = specular;
+    this.ambient = ambient;
+    this.shininess = shininess;
+  }
+}
+
+Color.WHITE = new Color(1, 1, 1);
+Color.BLACK = new Color(0, 0, 0);
+
 class Ray {
   constructor(origin, direction) {
     this.origin = origin;
@@ -75,10 +87,10 @@ class Ray {
 }
 
 class Sphere {
-  constructor(center, radius, color) {
+  constructor(center, radius, material) {
     this.center = center;
     this.radius = radius;
-    this.color = color;
+    this.material = material;
   }
 
   intersect(ray) {
@@ -102,15 +114,18 @@ class Sphere {
     if (minus >= 0 && minus < t)
       t = minus;
 
-    return t;
+    return {
+      distance: t,
+      material: this.material
+    };
   }
 }
 
 class BoundingBox {
-  constructor(vmin, vmax, color) {
+  constructor(vmin, vmax, material) {
     this.vmin = vmin;
     this.vmax = vmax;
-    this.color = color;
+    this.material = material;
   }
 
   intersect(ray) {
@@ -160,14 +175,46 @@ class BoundingBox {
       tmax = tzmax;
 
     if (tmin >= 0) {
-      return tmin;
+      return {
+        distance: tmin,
+        material: this.material
+      };
     }
 
     return false;
   }
 }
 
-let random_color = () => {
+class Plane {
+  constructor(point, normal) {
+    this.point = point;
+    this.normal = normal.normalize();
+  }
+
+  intersect(ray) {
+    const denom = this.normal.dot(ray.direction.normalize());
+    if (denom > 1e-6) {
+      const p0l0 = this.point.subtract(ray.origin);
+      const t = p0l0.dot(this.normal) / denom;
+
+      if (t >= 0) {
+        const surface = ray.origin.add(ray.direction.normalize().multiply(t));
+
+        return {
+          distance: t,
+          material: default_material((Math.round(surface.x / 10) + Math.round(surface.z / 10)) & 1 ? Color.WHITE : Color.BLACK)
+        };
+      }
+    }
+
+    return false;
+  }
+}
+
+const default_material = color =>
+  new PhongMaterial(color, color, Color.WHITE, 50);
+
+const random_color = () => {
   return new Color(
     Math.random() * 0.5 + 0.5,
     Math.random() * 0.5 + 0.5,
@@ -175,9 +222,9 @@ let random_color = () => {
   );
 };
 
-let random_radius = () => {
-  let max = 30;
-  let min = 5;
+const random_radius = () => {
+  const max = 30;
+  const min = 5;
 
   return (Math.random() * (max - min)) + min;
 };
@@ -206,11 +253,12 @@ let random_position = () => {
 // ];
 
 const geometry = [
-  new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), new Color(1, 0, 0))
+  new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), default_material(new Color(1, 0, 0))),
+  new Plane(new Vector(0, -30, 0), new Vector(0, -1, 0))
 ];
 
 for (let sp = 0; sp < 100; sp++) {
-  geometry.push(new Sphere(random_position(), random_radius(), random_color()))
+  geometry.push(new Sphere(random_position(), random_radius(), default_material(random_color())))
 }
 
 const scene = {
@@ -228,21 +276,25 @@ const image = new Image(WIDTH, HEIGHT);
 document.image = image;
 
 const trace = ray => {
-  const closest = {
-    distance: Infinity,
-    color: new Color(0, 0, 0)
+  let closest = {
+    distance: Infinity
   };
 
   for (object of scene.geometry) {
-    const distance = object.intersect(ray);
+    const intersection = object.intersect(ray);
+    const distance = intersection.distance;
 
     if ((distance > 0 || distance === 0) && distance < closest.distance) {
-      closest.distance = distance;
-      closest.color = object.color;
+      closest = intersection;
     }
   }
 
-  return closest.color;
+  if (!isFinite(closest.distance))
+    return Color.BLACK;
+
+  const material = closest.material;
+
+  return material.diffuse;
 }
 
 const sample_pixel = (x, y) => {
