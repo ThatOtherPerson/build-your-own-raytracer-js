@@ -1,5 +1,5 @@
-const WIDTH = 256;
-const HEIGHT = 192;
+const WIDTH = 256 * 4;
+const HEIGHT = 192 * 4;
 
 const NUM_BOUNCES = 3;
 
@@ -103,12 +103,11 @@ class Texture {
   }
 
   at_pxy(px, py) {
-    const x = Math.round(px * (this.image.length - 1));
-    const y = Math.round(px * (this.image[0].length - 1));
+    py = 1 - py;
+    let x = Math.round(px * (this.image.length - 1));
+    const y = Math.round(py * (this.image[0].length - 1));
 
-    //console.log(px, py, x, y);
-    window.samples = window.samples || [];
-    window.samples.push({x, y});
+    x = (x + 1025) % this.image.length;
 
     return this.image[x][y];
   }
@@ -364,7 +363,7 @@ const createScene = () => {
       //new BoundingBox(new Vector(30, 30, 40), new Vector(10, 10, 60), default_material(new Color(1, 0, 0))),
       new Plane(new Vector(0, -30, 0), new Vector(0, 1, 0)),
       //new Sphere(new Vector(0, 0, 100), 50, new PhongMaterial(torquoise.scale(0.2), new Color(0.8, 0.8, 0.8), torquoise, new Color(0.8, 0.8, 0.8), 50))
-      //new Sphere(new Vector(0, 0, 50), 20, default_material(new Texture(earth)))
+      new Sphere(new Vector(0, 0, 50), 20, default_material(new Texture(earth)))
     ];
 
     for (let sp = 0; sp < 100; sp++) {
@@ -539,7 +538,12 @@ document.image = image;
 const render = () => {
   for (let y = 0; y < HEIGHT; y++) {
     for (let x = 0; x < WIDTH; x++) {
-      const color = sample_pixel(x, y);
+      const color = [
+        sample_pixel(x, y),
+        sample_pixel(x + 0.5, y),
+        sample_pixel(x, y + 0.5),
+        sample_pixel(x + 0.5, y + 0.5),
+      ].reduce((a, b) => a.add(b)).scale(0.25);
       image.putPixel(x, y, color.to_discrete());
 
       // image.putPixel(x, y, {
