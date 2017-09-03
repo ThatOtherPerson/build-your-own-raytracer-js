@@ -1,3 +1,5 @@
+HTMLImage = window.Image;
+
 class Image {
   constructor(w, h) {
     this.w = w;

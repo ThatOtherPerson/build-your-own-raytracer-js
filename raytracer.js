@@ -256,6 +256,9 @@ class Plane {
   }
 }
 
+class Triangle {
+}
+
 const default_material = color =>
   new PhongMaterial(color, new Color(0.5, 0.5, 0.5), color, 50);
 
@@ -305,6 +308,48 @@ const geometry = [
 for (let sp = 0; sp < 100; sp++) {
   geometry.push(new Sphere(random_position(), random_radius(), default_material(random_color())))
 }
+
+const imageDataToPixels = imageData => {
+  let image = [];
+
+  for (let y = 0; y < imageData.height; y++) {
+    let row = [];
+    for (let x = 0; x < imageData.width; x++) {
+      const index = (x + (y * imageData.width)) * 4;
+      const r = imageData.data[index];
+      const g = imageData.data[index + 1];
+      const b = imageData.data[index + 2];
+
+      row.push(new Color(r / 255, g / 255, b / 255));
+    }
+    image.push(row);
+  }
+
+  return image;
+}
+
+const loadImg = url => {
+  const image = new HTMLImage(100, 100);
+
+  return new Promise((resolve, reject) => {
+    image.addEventListener('load', function() {
+      this.height = this.naturalHeight;
+      this.width = this.naturalWidth;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = this.width;
+      canvas.height = this.height;
+
+      const context = canvas.getContext('2d');
+
+      context.drawImage(this, 0, 0, this.width, this.height);
+
+      resolve(imageDataToPixels(context.getImageData(0, 0, this.width, this.height)));
+    })
+
+    image.src = url;
+  });
+};
 
 const scene = {
   imagePlane: {
@@ -391,17 +436,21 @@ const sample_pixel = (x, y) => {
   return trace(ray);
 };
 
-for (let y = 0; y < HEIGHT; y++) {
-  for (let x = 0; x < WIDTH; x++) {
-    const color = sample_pixel(x, y);
-    image.putPixel(x, y, color.to_discrete());
+const render = () => {
+  for (let y = 0; y < HEIGHT; y++) {
+    for (let x = 0; x < WIDTH; x++) {
+      const color = sample_pixel(x, y);
+      image.putPixel(x, y, color.to_discrete());
 
-    // image.putPixel(x, y, {
-    //   r: x / WIDTH * 256,
-    //   g: y / HEIGHT * 256,
-    //   b: 0
-    // });
+      // image.putPixel(x, y, {
+      //   r: x / WIDTH * 256,
+      //   g: y / HEIGHT * 256,
+      //   b: 0
+      // });
+    }
   }
-}
 
-image.renderInto(document.querySelector('body'));
+  image.renderInto(document.querySelector('body'));
+};
+
+render();
